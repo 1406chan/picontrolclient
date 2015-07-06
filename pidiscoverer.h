@@ -3,30 +3,25 @@
 
 #include <QObject>
 #include <QtNetwork/QUdpSocket>
-#include <QSharedPointer>
 
-class PiNode: public QObject
+class PiNode
 {
-    Q_OBJECT
 public:
-    PiNode(QObject *parent = 0);
+    PiNode();
+    bool operator ==(const PiNode &node) const;
 
-    enum NodeCap {
+    enum NodeCaps {
         None = 0x00,
         PiCam = 0x01,
         Thermal = 0x10
     };
 
-    Q_DECLARE_FLAGS(NodeCaps, NodeCap)
-    Q_FLAG(NodeCaps)
-
-    NodeCaps caps;
+    int caps;
     QHostAddress address;
     QString addressString;
 };
 
-#define PiNodeShared QSharedPointer<PiNode>
-#define PiNodeList QList<PiNodeShared>
+#define PiNodeList QList<PiNode>
 
 class PiDiscoverer : public QObject
 {
@@ -36,11 +31,11 @@ public:
     PiNodeList discoveredNodes() const;
 
 Q_SIGNALS:
-    void nodeDiscovered(PiNodeShared node);
+    void nodeDiscovered(const PiNode &node);
 
 private Q_SLOTS:
     void datagramReceived();
-    void onNodeDiscovered(PiNodeShared node);
+    void onNodeDiscovered(const PiNode &node);
 
 private:
     QUdpSocket m_socket;

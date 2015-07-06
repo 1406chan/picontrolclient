@@ -1,6 +1,7 @@
 #include "nodeselector.h"
 #include <QNetworkInterface>
 #include <QNetworkRequest>
+#include <QNetworkReply>
 
 NodeSelector::NodeSelector(PiDiscoverer *discoverer, QNetworkAccessManager *nam, GStreamerPlayer *player, QObject *parent) :
     m_discoverer(discoverer),
@@ -19,13 +20,12 @@ NodeSelector::~NodeSelector()
     PiNodeList nodes = m_discoverer->discoveredNodes();
 
     //terminate all nodes
-    Q_FOREACH(QSharedPointer<PiNode> node, nodes) {
-            QString addr = node->address.toString().split(":").last();
-            QUrl terminateUrl("http://" + addr + ":8080/picam/?command=terminate");
+    Q_FOREACH(PiNode node, nodes) {
+            QUrl terminateUrl("http://" + node.addressString + ":8080/picam/?command=terminate");
             m_nam->get(QNetworkRequest(terminateUrl));
-            if (node->caps.testFlag(PiNode::Thermal)) {
+            if (node.caps & PiNode::Thermal) {
                 qDebug() << "termiante thermal node as well";
-                terminateUrl = QUrl("http://" + addr + ":8080/thermal/?command=terminate");
+                terminateUrl = QUrl("http://" + node.addressString + ":8080/thermalcam/?command=terminate");
                 m_nam->get(QNetworkRequest(terminateUrl));
             }
         }
@@ -52,7 +52,7 @@ void NodeSelector::selectPrevious()
         return;
     }
 
-    m_currentIndex = --m_currentIndex%nodes.size();
+    m_currentIndex = --m_currentIndex < 0 ? nodes.size()-1 : m_currentIndex;
     play();
 }
 
@@ -61,19 +61,6 @@ void NodeSelector::checkPlayback()
     PiNodeList nodes = m_discoverer->discoveredNodes();
     if(nodes.size() && m_player->pipelineString().isEmpty()) {
         play();
-    }
-    if (nodes.size()) {
-        Q_FOREACH(QSharedPointer<PiNode> node, nodes) {
-            if (node->caps.testFlag(PiNode::Thermal)) {
-                QString addr = node->address.toString().split(":").last();
-                QUrl startUrl("http://" + addr + ":8080/thermal/?command=start");
-                qDebug() << "thermal server start url " << startUrl;
-                QUrl mjpegUrl("http://"+ addr + ":5002/cam.mjpeg");
-                qDebug() << "mjpeg server start url " << mjpegUrl;
-                m_nam->get(QNetworkRequest(startUrl));
-                Q_EMIT thermalUrl(mjpegUrl);
-            }
-        }
     }
 }
 
@@ -86,8 +73,8 @@ void NodeSelector::play()
     qDebug() << "currentIndex is " << m_currentIndex << "among a total of " << nodes.size();
 
     QString servercmd = "http://$SERVER_IP:8080/picam/?command=" + m_serverCommand;
-    PiNodeShared node = nodes.at(m_currentIndex);
-    servercmd = servercmd.replace("$SERVER_IP", node->address.toString().split(":").last());
+    PiNode node = nodes.at(m_currentIndex);
+    servercmd = servercmd.replace("$SERVER_IP", node.addressString);
     servercmd = servercmd.replace("$CLIENT_IP", deviceAddress());
     servercmd = servercmd.replace("$UDP_PORT", m_ports.at(m_currentIndex));
     servercmd = servercmd.replace("$RESw", "1280");
@@ -100,6 +87,20 @@ void NodeSelector::play()
     qDebug() << "CLIENT CMD: " << playcmd;
     m_player->setPipelineString(playcmd);
     m_player->play();
+
+    // check if its thermal module, if so start thermal
+    if (node.caps & PiNode::Thermal) {
+        QUrl startUrl("http://" + node.addressString + ":8080/thermalcam/?command=start");
+        qDebug() << "thermal server start url " << startUrl;
+        QUrl mjpegUrl("http://"+ node.addressString + ":5002/cam.mjpg");
+        qDebug() << "mjpeg server start url " << mjpegUrl;
+        QNetworkReply *reply = m_nam->get(QNetworkRequest(startUrl));
+        reply->setProperty("camUrl", mjpegUrl);
+        connect(reply, SIGNAL(finished()), SLOT(replyFinished()));
+    } else {
+        // hide thermal
+        Q_EMIT thermalUrl(QUrl());
+    }
 }
 
 QString NodeSelector::deviceAddress() const
@@ -117,4 +118,17 @@ QString NodeSelector::deviceAddress() const
     QString address = addr.toString();
     qDebug() << "got the following address for the host device" << address;
     return address;
+}
+
+void NodeSelector::replyFinished()
+{
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    Q_ASSERT(reply);
+    if (reply->error() == QNetworkReply::NoError)
+    {
+        qDebug() << "thermal camera started without any error";
+        QUrl mjpegUrl = reply->property("camUrl").toUrl();
+        Q_EMIT thermalUrl(mjpegUrl);
+    }
+    reply->deleteLater();
 }

@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
 
     QNetworkAccessManager *nam = new QNetworkAccessManager;
     NodeSelector nodeSelector(&discoverer, nam, player1);
-    QObject::connect(&discoverer, SIGNAL(nodeDiscovered(QSharedPointer<PiNode>)),
+    QObject::connect(&discoverer, SIGNAL(nodeDiscovered(PiNode)),
                      &nodeSelector, SLOT(checkPlayback()));
 
     view.rootContext()->setContextProperty(QLatin1String("nodeSelector"), &nodeSelector);
@@ -50,7 +50,9 @@ int main(int argc, char *argv[])
 #endif
 
     view.setSource(QUrl(QLatin1String("qrc:///main.qml")));
-    view.show();
+    view.setColor(Qt::black);
+//    view.show();
+    view.showFullScreen();
 
     return app.exec();
 }

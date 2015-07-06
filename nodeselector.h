@@ -28,6 +28,9 @@ public Q_SLOTS:
     void play();
     void checkPlayback();
 
+private Q_SLOTS:
+    void replyFinished();
+
 private:
     PiDiscoverer *m_discoverer;
     GStreamerPlayer *m_player;

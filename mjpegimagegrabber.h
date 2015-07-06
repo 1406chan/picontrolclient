@@ -21,6 +21,9 @@ Q_SIGNALS:
     void newFrameData(const QString &data);
     void finished(const QString &errorString);
 
+public Q_SLOTS:
+//    void start();
+
 private Q_SLOTS:
     void onFPSTImer();
     void onReadyRead();

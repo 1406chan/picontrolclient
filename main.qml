@@ -9,6 +9,8 @@ Rectangle {
     width: 1280
     height: 720
     visible: true
+    anchors.centerIn: parent
+    color: "black"
 
     VideoItem {
         id: video1
@@ -35,16 +37,19 @@ Rectangle {
 
     Image {
         id: thermalImage
+        property real thermalfovfactor: 0.5
+        property int imageid: 0
         source: "image://theramlprovider/pixmap"
         cache: false
         anchors.centerIn: parent
-        width: 80
-        height: 60
+        width: parent.width*thermalfovfactor
+        height: parent.height*thermalfovfactor
     }
 
     Connections {
         target: thermal
-        onRefresh: { thermalImage.source = " "; thermalImage.source = "image://theramlprovider/pixmap" }
+        onRefresh: { thermalImage.imageid++;
+                     thermalImage.source = "image://theramlprovider/"+thermalImage.imageid }
     }
 
 

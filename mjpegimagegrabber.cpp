@@ -23,7 +23,7 @@ MJPEGImageGrabber::MJPEGImageGrabber(QNetworkAccessManager *nam, const QUrl &url
 
 void MJPEGImageGrabber::onFPSTImer()
 {
-    qDebug() << "FPS" << m_fps;
+//    qDebug() << "FPS" << m_fps;
     m_fps = 0;
 }
 
