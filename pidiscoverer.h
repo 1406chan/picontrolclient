@@ -13,10 +13,12 @@ public:
     enum NodeCaps {
         None = 0x00,
         PiCam = 0x01,
-        Thermal = 0x10
+        Thermal = 0x10,
+        MAVProxy = 0x100
     };
 
     int caps;
+    int capsRunning;
     QHostAddress address;
     QString addressString;
 };

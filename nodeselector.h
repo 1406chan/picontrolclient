@@ -4,12 +4,13 @@
 #include <QObject>
 #include <QNetworkAccessManager>
 #include <QString>
+#include <QVariantMap>
 #include "pidiscoverer.h"
 #include "GStreamerPlayer.h"
 
 #define playCommand "udpsrc port=$PORT ! application/x-rtp,encoding-name=H264,payload=96 ! rtph264depay ! h264parse ! avdec_h264"
 #define serverCommand "raspivid -t 0 -h $RESh -w $RESw -fps 49 -b 2000000 -o - | gst-launch-1.0 -v fdsrc ! h264parse ! rtph264pay config-interval=1 pt=96 ! udpsink host=$CLIENT_IP port=$UDP_PORT"
-
+#define mavproxyCommand "mavproxy.py --master=/dev/ttyAMA0 --baudrate 57600 --out $CLIENT_IP:14550 --aircraft MyCopter"
 class NodeSelector : public QObject
 {
     Q_OBJECT
@@ -32,10 +33,11 @@ private Q_SLOTS:
     void replyFinished();
 
 private:
+    void sendRequest(const QUrl &url, const QVariantMap &properties = QVariantMap());
     PiDiscoverer *m_discoverer;
     GStreamerPlayer *m_player;
     int m_currentIndex;
-    const QString m_playCommand, m_serverCommand;
+    const QString m_playCommand, m_serverCommand, m_mavProxyCommand;
     QNetworkAccessManager *m_nam;
     QList<QString> m_ports;
 };

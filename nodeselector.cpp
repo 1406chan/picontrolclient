@@ -9,6 +9,7 @@ NodeSelector::NodeSelector(PiDiscoverer *discoverer, QNetworkAccessManager *nam,
     m_currentIndex(0),
     m_playCommand(playCommand),
     m_serverCommand(serverCommand),
+    m_mavProxyCommand(mavproxyCommand),
     m_nam(nam),
     QObject(parent)
 {
@@ -22,11 +23,16 @@ NodeSelector::~NodeSelector()
     //terminate all nodes
     Q_FOREACH(PiNode node, nodes) {
             QUrl terminateUrl("http://" + node.addressString + ":8080/picam/?command=terminate");
-            m_nam->get(QNetworkRequest(terminateUrl));
+            sendRequest(terminateUrl);
             if (node.caps & PiNode::Thermal) {
                 qDebug() << "termiante thermal node as well";
                 terminateUrl = QUrl("http://" + node.addressString + ":8080/thermalcam/?command=terminate");
-                m_nam->get(QNetworkRequest(terminateUrl));
+                sendRequest(terminateUrl);
+            }
+            if (node.caps & PiNode::MAVProxy) {
+                qDebug() << "terminate mavproxy node as well";
+                terminateUrl = QUrl("http://" + node.addressString + ":8080/mavproxy/?command=terminate");
+                sendRequest(terminateUrl);
             }
         }
 }
@@ -72,31 +78,59 @@ void NodeSelector::play()
     }
     qDebug() << "currentIndex is " << m_currentIndex << "among a total of " << nodes.size();
 
-    QString servercmd = "http://$SERVER_IP:8080/picam/?command=" + m_serverCommand;
     PiNode node = nodes.at(m_currentIndex);
-    servercmd = servercmd.replace("$SERVER_IP", node.addressString);
-    servercmd = servercmd.replace("$CLIENT_IP", deviceAddress());
-    servercmd = servercmd.replace("$UDP_PORT", m_ports.at(m_currentIndex));
-    servercmd = servercmd.replace("$RESw", "1280");
-    servercmd = servercmd.replace("$RESh", "720");
 
-    qDebug() << "SERVER CMD: " << servercmd;
-    m_nam->get(QNetworkRequest(servercmd));
-    QString playcmd = m_playCommand;
-    playcmd = playcmd.replace("$PORT", m_ports.at(m_currentIndex));
-    qDebug() << "CLIENT CMD: " << playcmd;
-    m_player->setPipelineString(playcmd);
-    m_player->play();
+    if (node.caps & PiNode::PiCam) { // has picam capability
+        if (!(node.capsRunning & PiNode::PiCam)) { //picam is not running
+            QString servercmd = "http://$SERVER_IP:8080/picam/?command=" + m_serverCommand;
+            servercmd = servercmd.replace("$SERVER_IP", node.addressString);
+            servercmd = servercmd.replace("$CLIENT_IP", deviceAddress());
+            servercmd = servercmd.replace("$UDP_PORT", m_ports.at(m_currentIndex));
+            servercmd = servercmd.replace("$RESw", "1280");
+            servercmd = servercmd.replace("$RESh", "720");
+
+            qDebug() << "SERVER CMD: " << servercmd;
+            QVariantMap map;
+            map.insert("requestFor", PiNode::PiCam);
+            map.insert("nodeIndex", m_currentIndex);
+            sendRequest(servercmd, map);
+        }
+
+        // play picam
+        QString playcmd = m_playCommand;
+        playcmd = playcmd.replace("$PORT", m_ports.at(m_currentIndex));
+        qDebug() << "CLIENT CMD: " << playcmd;
+        m_player->setPipelineString(playcmd);
+        m_player->play();
+    }
+
+    if (node.caps & PiNode::MAVProxy) { // has mav capability
+        if (!(node.capsRunning & PiNode::MAVProxy)) { // mav proxy is not running
+            QString mavcmd = "http://" + node.addressString + ":8080/mavproxy/?command=" + m_mavProxyCommand;
+            mavcmd.replace("$CLIENT_IP", deviceAddress());
+            qDebug() << "mav command " << mavcmd;
+            QVariantMap map;
+            map.insert("requestFor", PiNode::MAVProxy);
+            map.insert("nodeIndex", m_currentIndex);
+            sendRequest(mavcmd, map);
+        }
+    }
 
     // check if its thermal module, if so start thermal
     if (node.caps & PiNode::Thermal) {
-        QUrl startUrl("http://" + node.addressString + ":8080/thermalcam/?command=start");
-        qDebug() << "thermal server start url " << startUrl;
         QUrl mjpegUrl("http://"+ node.addressString + ":5002/cam.mjpg");
-        qDebug() << "mjpeg server start url " << mjpegUrl;
-        QNetworkReply *reply = m_nam->get(QNetworkRequest(startUrl));
-        reply->setProperty("camUrl", mjpegUrl);
-        connect(reply, SIGNAL(finished()), SLOT(replyFinished()));
+        if (!(node.capsRunning & PiNode::Thermal)) {
+            QUrl startUrl("http://" + node.addressString + ":8080/thermalcam/?command=start");
+            qDebug() << "thermal server start url " << startUrl;
+            qDebug() << "mjpeg server start url " << mjpegUrl;
+            QVariantMap map;
+            map.insert("requestFor", PiNode::Thermal);
+            map.insert("nodeIndex", m_currentIndex);
+            map.insert("camUrl", mjpegUrl);
+            sendRequest(startUrl, map);
+        } else {
+            Q_EMIT thermalUrl(mjpegUrl);
+        }
     } else {
         // hide thermal
         Q_EMIT thermalUrl(QUrl());
@@ -123,12 +157,51 @@ QString NodeSelector::deviceAddress() const
 void NodeSelector::replyFinished()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    reply->deleteLater();
+    PiNodeList nodes = m_discoverer->discoveredNodes();
+    if (!nodes.size()) {
+        return;
+    }
     Q_ASSERT(reply);
     if (reply->error() == QNetworkReply::NoError)
     {
-        qDebug() << "thermal camera started without any error";
-        QUrl mjpegUrl = reply->property("camUrl").toUrl();
-        Q_EMIT thermalUrl(mjpegUrl);
+        bool ok = false;
+        int capibility = reply->property("requestFor").toInt(&ok);
+        if (!ok) {
+            qDebug() << "generic request return";
+            return;
+        }
+
+        int index;
+        QUrl url;
+        switch (capibility) {
+        case PiNode::PiCam:
+            index = reply->property("nodeIndex").toInt();
+            nodes[index].capsRunning |= PiNode::PiCam;
+            qDebug() << "picam started without any error";
+            break;
+        case PiNode::Thermal:
+            index = reply->property("nodeIndex").toInt();
+            nodes[index].capsRunning |= PiNode::Thermal;
+            url = reply->property("camUrl").toUrl();
+            Q_EMIT thermalUrl(url);
+            qDebug() << "thermal camera started without any error";
+            break;
+        case PiNode::MAVProxy:
+            index = reply->property("nodeIndex").toInt();
+            nodes[index].capsRunning |= PiNode::MAVProxy;
+            qDebug() << "mavproxy started without any error";
+        default:
+            break;
+        }
     }
-    reply->deleteLater();
+}
+
+void NodeSelector::sendRequest(const QUrl &url, const QVariantMap &properties)
+{
+    QNetworkRequest request(url);
+    QNetworkReply *reply = m_nam->get(request);
+    Q_FOREACH(const QString &key, properties.keys()) {
+        reply->setProperty(key.toStdString().c_str(), properties.value(key));
+    }
 }

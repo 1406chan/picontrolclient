@@ -2,7 +2,8 @@
 
 PiNode::PiNode()
 {
-    caps = PiNode::None;
+    caps        = PiNode::None;
+    capsRunning = PiNode::None;
 }
 
 bool PiNode::operator ==(const PiNode &node) const
@@ -34,6 +35,10 @@ void PiDiscoverer::datagramReceived()
 
         if (datagram.contains("thermal")) {
             node.caps |= PiNode::Thermal;
+        }
+
+        if (datagram.contains("mavproxy")) {
+            node.caps |= PiNode::MAVProxy;
         }
         node.address = addr;
         node.addressString = addr.toString().split(":").last();
