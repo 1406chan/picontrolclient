@@ -14,6 +14,9 @@ NodeSelector::NodeSelector(PiDiscoverer *discoverer, QNetworkAccessManager *nam,
     QObject(parent)
 {
     m_ports << "5003" << "5004" << "5005";
+//    auto playcmd = "udpsrc port=9000 ! application/x-rtp,encoding-name=H264,payload=96 ! rtph264depay ! h264parse ! avdec_h264";
+//    m_player->setPipelineString(playcmd);
+//    m_player->play();
 }
 
 NodeSelector::~NodeSelector()
@@ -21,7 +24,7 @@ NodeSelector::~NodeSelector()
     PiNodeList nodes = m_discoverer->discoveredNodes();
 
     //terminate all nodes
-    Q_FOREACH(PiNode node, nodes) {
+    Q_FOREACH(const PiNode &node, nodes) {
             QUrl terminateUrl("http://" + node.addressString + ":8080/picam/?command=terminate");
             sendRequest(terminateUrl);
             if (node.caps & PiNode::Thermal) {
@@ -78,7 +81,7 @@ void NodeSelector::play()
     }
     qDebug() << "currentIndex is " << m_currentIndex << "among a total of " << nodes.size();
 
-    PiNode node = nodes.at(m_currentIndex);
+    const PiNode &node = nodes.at(m_currentIndex);
 
     if (node.caps & PiNode::PiCam) { // has picam capability
         if (!(node.capsRunning & PiNode::PiCam)) { //picam is not running
@@ -204,4 +207,5 @@ void NodeSelector::sendRequest(const QUrl &url, const QVariantMap &properties)
     Q_FOREACH(const QString &key, properties.keys()) {
         reply->setProperty(key.toStdString().c_str(), properties.value(key));
     }
+    connect(reply, SIGNAL(finished()), this, SLOT(replyFinished()));
 }

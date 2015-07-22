@@ -3,6 +3,7 @@ import QtQuick.Controls 1.3
 import QtQuick.Window 2.2
 import QtQuick.Dialogs 1.2
 import QtGStreamer 1.0
+import QtQuick.Controls.Styles 1.3
 
 
 Rectangle {
@@ -21,18 +22,30 @@ Rectangle {
 
     Button {
         id : right
-        iconName : "ArrowForward"
+        iconSource: "images/back.png"
+//        opacity: 0
+        rotation: 180
         anchors.verticalCenter: parent.verticalCenter
         x: parent.width - 150
         onClicked: nodeSelector.selectNext()
+        style: ButtonStyle {
+                background: Rectangle {
+                         color:"transparent"
+                        }
+            }
     }
 
     Button {
         id: left
-        iconName: "ArrowBackward"
+        iconSource: "images/back.png"
         anchors.verticalCenter: parent.verticalCenter
         x: 50
         onClicked: nodeSelector.selectPrevious()
+        style: ButtonStyle {
+                background: Rectangle {
+                         color:"transparent"
+                        }
+            }
     }
 
     Image {
@@ -51,6 +64,8 @@ Rectangle {
         onRefresh: { thermalImage.imageid++;
                      thermalImage.source = "image://theramlprovider/"+thermalImage.imageid }
     }
+
+
 
 
 }
